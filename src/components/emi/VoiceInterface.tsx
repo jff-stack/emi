@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useConversation } from "@elevenlabs/react";
 import {
     TranscriptMessage,
     generateSessionId,
+    generateDynamicSystemPrompt,
+    EMI_PERSONA,
 } from "@/lib/elevenlabs";
 
 /**
@@ -15,6 +17,8 @@ interface VoiceInterfaceProps {
     onConversationEnd?: (transcript: TranscriptMessage[], conversationId: string) => void;
     /** Callback for real-time transcript updates */
     onTranscriptUpdate?: (messages: TranscriptMessage[]) => void;
+    /** Callback when speaking state changes (for biofeedback) */
+    onSpeakingChange?: (isSpeaking: boolean) => void;
     /** Whether the voice interface should be active */
     isActive?: boolean;
 }
@@ -36,21 +40,33 @@ interface VoiceInterfaceProps {
 export function VoiceInterface({
     onConversationEnd,
     onTranscriptUpdate,
+    onSpeakingChange,
     isActive = true,
 }: VoiceInterfaceProps) {
     // Session tracking for Kairo - only generate on client side to avoid hydration mismatch
     const [sessionId, setSessionId] = useState<string>("");
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
+    const [turnCount, setTurnCount] = useState(0);
 
     // UI state
     const [currentCaption, setCurrentCaption] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
 
-    // Generate session ID only on client side
+    // Track if component is mounted to prevent double-connection from React Strict Mode
+    const isMountedRef = useRef(true);
+    const hasStartedRef = useRef(false);
+
+    // Generate session ID only on client side and track mount state
     useEffect(() => {
+        isMountedRef.current = true;
+        hasStartedRef.current = false;
         setSessionId(generateSessionId());
+
+        return () => {
+            isMountedRef.current = false;
+        };
     }, []);
 
     // Notify parent of transcript updates
@@ -84,6 +100,11 @@ export function VoiceInterface({
 
             setTranscript((prev) => [...prev, newMessage]);
 
+            // Track turn count for dynamic prompt context (each user turn = 1 turn)
+            if (message.source === "user") {
+                setTurnCount((prev) => prev + 1);
+            }
+
             // Update caption
             setCurrentCaption(message.message);
         },
@@ -93,6 +114,11 @@ export function VoiceInterface({
             setError(errorMessage);
         },
     });
+
+    // Notify parent of speaking state changes (for biofeedback)
+    useEffect(() => {
+        onSpeakingChange?.(conversation.isSpeaking);
+    }, [conversation.isSpeaking, onSpeakingChange]);
 
     /**
      * Fetch signed URL from our secure API route
@@ -113,6 +139,13 @@ export function VoiceInterface({
      * Start the conversation using signed URL
      */
     const startConversation = useCallback(async () => {
+        // Prevent double-start from React Strict Mode or rapid clicks
+        if (hasStartedRef.current || !isMountedRef.current) {
+            console.log(`[${sessionId}] Ignoring duplicate start request`);
+            return;
+        }
+        hasStartedRef.current = true;
+
         setIsStarting(true);
         setError(null);
 
@@ -120,22 +153,44 @@ export function VoiceInterface({
             // Request microphone permission first
             await navigator.mediaDevices.getUserMedia({ audio: true });
 
+            // Check if still mounted after async operation
+            if (!isMountedRef.current) {
+                console.log(`[${sessionId}] Component unmounted, aborting start`);
+                return;
+            }
+
             // Get signed URL from our API
             const signedUrl = await getSignedUrl();
 
-            // Start the conversation with signed URL
+            // Check if still mounted after async operation
+            if (!isMountedRef.current) {
+                console.log(`[${sessionId}] Component unmounted, aborting start`);
+                return;
+            }
+
+            // Start the conversation with signed URL and dynamic system prompt override
             // startSession returns the conversation ID as a string
             const convId = await conversation.startSession({
                 signedUrl,
+                overrides: {
+                    agent: {
+                        prompt: {
+                            prompt: generateDynamicSystemPrompt(0), // Start with early-phase prompt
+                        },
+                        firstMessage: EMI_PERSONA.firstMessage,
+                    },
+                },
             });
 
-            // Store conversation ID for Kairo
-            if (convId) {
+            // Store conversation ID for Kairo (only if still mounted)
+            if (convId && isMountedRef.current) {
                 setConversationId(convId);
                 console.log(`[${sessionId}] Started conversation: ${convId}`);
             }
         } catch (err) {
             console.error("Failed to start conversation:", err);
+            if (!isMountedRef.current) return;
+
             if (err instanceof DOMException && err.name === "NotAllowedError") {
                 setError("Microphone access denied. Please enable microphone permissions.");
             } else if (err instanceof Error) {
@@ -143,8 +198,12 @@ export function VoiceInterface({
             } else {
                 setError("Failed to start conversation. Please try again.");
             }
+            // Reset hasStarted on error so user can retry
+            hasStartedRef.current = false;
         } finally {
-            setIsStarting(false);
+            if (isMountedRef.current) {
+                setIsStarting(false);
+            }
         }
     }, [conversation, sessionId]);
 
@@ -164,151 +223,111 @@ export function VoiceInterface({
         setTranscript([]);
         setConversationId(null);
         setCurrentCaption("");
+        setTurnCount(0);
     }, [conversation, onConversationEnd, transcript, conversationId]);
 
-    /**
-     * Determine orb styles based on conversation status
-     */
-    const getOrbStyles = () => {
-        const status = conversation.status;
-
-        if (status === "connected") {
-            // Pulsating green when connected (speaking/listening)
-            return {
-                background: conversation.isSpeaking
-                    ? "bg-gradient-to-br from-emerald-400 to-teal-500"
-                    : "bg-gradient-to-br from-blue-400 to-cyan-500",
-                glow: conversation.isSpeaking
-                    ? "shadow-[0_0_60px_rgba(52,211,153,0.5)]"
-                    : "shadow-[0_0_60px_rgba(59,130,246,0.5)]",
-                pulse: "animate-pulse",
-            };
-        }
-
-        // Static grey when disconnected
-        return {
-            background: "bg-slate-700",
-            glow: "",
-            pulse: "",
-        };
-    };
-
-    const orbStyles = getOrbStyles();
     const isConnected = conversation.status === "connected";
 
+    // Generate waveform bar heights based on speaking state
+    const getWaveformBars = () => {
+        const barCount = 5;
+        return Array.from({ length: barCount }, (_, i) => {
+            const baseHeight = conversation.isSpeaking ? 40 : 20;
+            const variance = conversation.isSpeaking ? 30 : 5;
+            return baseHeight + Math.sin(Date.now() / 200 + i * 0.5) * variance;
+        });
+    };
+
     return (
-        <div className="flex flex-col items-center gap-8">
-            {/* Pulsating Orb */}
+        <div className="flex flex-col items-center gap-6">
+            {/* Clean Voice Waveform Visualization */}
             <div className="relative flex items-center justify-center">
-                {/* Outer glow */}
-                <div
-                    className={`absolute w-44 h-44 rounded-full transition-all duration-500 ${orbStyles.glow} ${orbStyles.pulse}`}
-                />
-
-                {/* Ripple effects when speaking */}
-                {conversation.isSpeaking && (
-                    <>
-                        <div className="absolute w-40 h-40 rounded-full border-2 border-emerald-400/30 animate-ping" />
-                        <div
-                            className="absolute w-48 h-48 rounded-full border border-emerald-400/20 animate-ping"
-                            style={{ animationDelay: "0.5s" }}
-                        />
-                    </>
-                )}
-
-                {/* Main orb */}
-                <div
-                    className={`relative w-36 h-36 rounded-full flex items-center justify-center transition-all duration-300 ${orbStyles.background}`}
-                >
-                    {conversation.isSpeaking ? (
-                        // Sound wave icon when speaking
-                        <svg
-                            className="w-14 h-14 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                <div className={`flex items-center justify-center gap-1 p-8 rounded-2xl border transition-all duration-300 ${isConnected
+                    ? conversation.isSpeaking
+                        ? "border-[#0055A5] bg-blue-50 dark:bg-blue-950/30"
+                        : "border-green-500 bg-green-50 dark:bg-green-950/30"
+                    : "border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-800"
+                    }`}>
+                    {/* Waveform Bars */}
+                    <div className="flex items-center gap-1 h-16">
+                        {[...Array(5)].map((_, i) => (
+                            <div
+                                key={i}
+                                className={`w-2 rounded-full transition-all duration-150 ${isConnected
+                                    ? conversation.isSpeaking
+                                        ? "bg-[#0055A5]"
+                                        : "bg-green-500"
+                                    : "bg-gray-300 dark:bg-slate-600"
+                                    }`}
+                                style={{
+                                    height: isConnected && conversation.isSpeaking
+                                        ? `${20 + Math.sin(Date.now() / 150 + i * 0.8) * 25}px`
+                                        : isConnected
+                                            ? `${15 + Math.sin(Date.now() / 300 + i * 0.5) * 10}px`
+                                            : '20px',
+                                    animation: isConnected ? `waveform ${0.6 + i * 0.1}s ease-in-out infinite` : 'none',
+                                }}
                             />
-                        </svg>
-                    ) : (
-                        // Microphone icon
-                        <svg
-                            className="w-14 h-14 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                            />
-                        </svg>
-                    )}
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            {/* Status Text */}
+            {/* Status Text - Clean Typography */}
             <div className="text-center">
-                <p className="text-lg font-medium text-slate-200">
+                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                     {isStarting
                         ? "Connecting..."
                         : !isConnected
-                            ? "Ready to begin"
+                            ? "Virtual Intake Assistant"
                             : conversation.isSpeaking
                                 ? "Emi is speaking..."
-                                : "Listening to you..."}
+                                : "Listening..."}
                 </p>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     {isConnected
-                        ? "Speak naturally — I'm here to listen"
-                        : "Click below to start your triage"}
+                        ? "Speak naturally — I'm here to help"
+                        : "Click below to begin your virtual visit"}
                 </p>
             </div>
 
-            {/* Real-time Captions */}
+            {/* Real-time Captions - Clean Card */}
             {isConnected && currentCaption && (
-                <div className="w-full max-w-md bg-slate-800/60 backdrop-blur-sm rounded-xl p-4 border border-slate-700">
-                    <p className="text-sm text-slate-400 mb-1">
-                        {conversation.isSpeaking ? "Emi:" : "You:"}
+                <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700 shadow-sm">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">
+                        {conversation.isSpeaking ? "Emi" : "You"}
                     </p>
-                    <p className="text-slate-200 leading-relaxed">{currentCaption}</p>
+                    <p className="text-slate-800 dark:text-slate-200 leading-relaxed">{currentCaption}</p>
                 </div>
             )}
 
-            {/* Control Buttons */}
+            {/* Control Buttons - Clean Clinical Style */}
             <div className="flex flex-col gap-3 w-full max-w-xs">
                 {!isConnected ? (
                     <button
                         onClick={startConversation}
                         disabled={!isActive || isStarting}
-                        className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all ${isActive && !isStarting
-                            ? "bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white shadow-lg hover:shadow-cyan-500/25"
-                            : "bg-slate-700 text-slate-400 cursor-not-allowed"
+                        className={`w-full py-3 px-6 rounded-lg font-semibold text-base transition-all shadow-sm ${isActive && !isStarting
+                            ? "bg-[#0055A5] hover:bg-[#004080] text-white"
+                            : "bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
                             }`}
                     >
-                        {isStarting ? "Connecting..." : "Start Triage"}
+                        {isStarting ? "Connecting..." : "Begin Intake"}
                     </button>
                 ) : (
                     <button
                         onClick={endConversation}
-                        className="w-full py-4 px-6 rounded-xl font-semibold text-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-lg hover:shadow-emerald-500/25 transition-all"
+                        className="w-full py-3 px-6 rounded-lg font-semibold text-base bg-green-600 hover:bg-green-700 text-white shadow-sm transition-all"
                     >
-                        Finish
+                        Complete Visit
                     </button>
                 )}
             </div>
 
-            {/* Error Messages */}
+            {/* Error Messages - Clean Alert */}
             {error && (
-                <div className="w-full max-w-md bg-red-900/30 border border-red-700/50 rounded-xl p-4">
-                    <p className="text-red-400 text-sm flex items-center gap-2">
+                <div className="w-full max-w-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <p className="text-red-700 dark:text-red-400 text-sm flex items-center gap-2">
                         <svg
                             className="w-5 h-5 flex-shrink-0"
                             fill="none"
@@ -327,10 +346,9 @@ export function VoiceInterface({
                 </div>
             )}
 
-            {/* Session/Conversation ID for debugging */}
-            <div className="text-xs text-slate-600 space-y-1 text-center">
-                {sessionId && <p>Session: {sessionId}</p>}
-                {conversationId && <p>Conversation: {conversationId}</p>}
+            {/* Session ID - Subtle */}
+            <div className="text-xs text-slate-400 dark:text-slate-600 space-y-1 text-center">
+                {conversationId && <p>Session: {conversationId.slice(0, 8)}...</p>}
             </div>
         </div>
     );

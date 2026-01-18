@@ -17,11 +17,14 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       chainId: 1337,
+      type: "edr-simulated",
     },
     localhost: {
       url: "http://127.0.0.1:8545",
+      type: "http",
     },
     sepolia: {
+      type: "http",
       url:
         process.env.SEPOLIA_RPC_URL ||
         "https://eth-sepolia.g.alchemy.com/v2/demo",

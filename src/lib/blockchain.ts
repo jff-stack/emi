@@ -113,10 +113,7 @@ export async function submitReportToBlockchain(reportId: string, reportData: any
         const reportHash = hashReport(reportData);
         
         // Submit transaction with explicit options to avoid ENS resolution
-        const tx = await contract.submitReport(reportId, reportHash, {
-            // Explicitly set to prevent ENS lookups
-            from: await contract.runner?.getAddress(),
-        });
+        const tx = await contract.submitReport(reportId, reportHash);
         
         // Wait for confirmation
         const receipt = await tx.wait();

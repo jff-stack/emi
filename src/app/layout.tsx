@@ -8,20 +8,21 @@ import "./globals.css";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
 /**
  * @description Emi - AI Intake Companion for Healthcare
  */
 export const metadata: Metadata = {
-  title: "Emi | AI Intake Companion",
-  description: "Intelligent medical intake powered by voice AI, real-time vitals monitoring, and clinical synthesis",
-  keywords: ["healthcare", "AI", "medical intake", "voice assistant", "vitals monitoring"],
+  title: "Emi | Virtual Triage & Intake",
+  description: "Quality care, right around the corner. AI-powered virtual triage and medical intake.",
+  keywords: ["healthcare", "AI", "medical intake", "virtual triage", "telemedicine"],
 };
 
 /**
- * @description Root layout with dark mode enabled by default
- * Implements a healthcare aesthetic using Slate/Zinc color palette
+ * @description Root layout with Trust & Triage aesthetic
+ * Clean, professional healthcare interface
  */
 export default function RootLayout({
   children,
@@ -29,10 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body
-        className={`${inter.variable} font-sans antialiased min-h-screen bg-background text-foreground`}
-      >
+    <html lang="en">
+      <body className={`${inter.variable} font-sans antialiased`}>
         {children}
       </body>
     </html>
