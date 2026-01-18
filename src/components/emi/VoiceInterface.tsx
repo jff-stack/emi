@@ -86,6 +86,8 @@ export function VoiceInterface({
         },
         onDisconnect: () => {
             console.log(`[${sessionId}] Disconnected from ElevenLabs`);
+            // Reset hasStarted so user can start a new conversation
+            hasStartedRef.current = false;
             // Log conversation ID for Kairo verification
             if (conversationId) {
                 console.log(`[KAIRO] Conversation ID for verification: ${conversationId}`);
@@ -110,8 +112,20 @@ export function VoiceInterface({
         },
         onError: (err) => {
             console.error(`[${sessionId}] ElevenLabs error:`, err);
-            const errorMessage = typeof err === "string" ? err : String(err);
+            console.error(`[${sessionId}] Error type:`, typeof err);
+            console.error(`[${sessionId}] Error details:`, JSON.stringify(err, null, 2));
+
+            // Try to extract meaningful error message
+            let errorMessage = "Unknown error occurred";
+            if (typeof err === "string") {
+                errorMessage = err;
+            } else if (err && typeof err === "object") {
+                errorMessage = (err as { message?: string }).message ||
+                    (err as { error?: string }).error ||
+                    JSON.stringify(err);
+            }
             setError(errorMessage);
+            hasStartedRef.current = false; // Allow retry on error
         },
     });
 
@@ -139,12 +153,15 @@ export function VoiceInterface({
      * Start the conversation using signed URL
      */
     const startConversation = useCallback(async () => {
+        console.log(`[${sessionId}] Begin Intake clicked. hasStarted=${hasStartedRef.current}, isMounted=${isMountedRef.current}`);
+
         // Prevent double-start from React Strict Mode or rapid clicks
         if (hasStartedRef.current || !isMountedRef.current) {
             console.log(`[${sessionId}] Ignoring duplicate start request`);
             return;
         }
         hasStartedRef.current = true;
+        console.log(`[${sessionId}] Starting conversation...`);
 
         setIsStarting(true);
         setError(null);
@@ -168,18 +185,11 @@ export function VoiceInterface({
                 return;
             }
 
-            // Start the conversation with signed URL and dynamic system prompt override
-            // startSession returns the conversation ID as a string
+            // Start the conversation with signed URL
+            // Note: Removed overrides - using agent's default config from ElevenLabs dashboard
+            // If you need custom prompts, configure them in the ElevenLabs dashboard
             const convId = await conversation.startSession({
                 signedUrl,
-                overrides: {
-                    agent: {
-                        prompt: {
-                            prompt: generateDynamicSystemPrompt(0), // Start with early-phase prompt
-                        },
-                        firstMessage: EMI_PERSONA.firstMessage,
-                    },
-                },
             });
 
             // Store conversation ID for Kairo (only if still mounted)
