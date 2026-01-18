@@ -38,8 +38,8 @@ export function VoiceInterface({
     onTranscriptUpdate,
     isActive = true,
 }: VoiceInterfaceProps) {
-    // Session tracking for Kairo
-    const [sessionId] = useState(() => generateSessionId());
+    // Session tracking for Kairo - only generate on client side to avoid hydration mismatch
+    const [sessionId, setSessionId] = useState<string>("");
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
 
@@ -47,6 +47,18 @@ export function VoiceInterface({
     const [currentCaption, setCurrentCaption] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
+
+    // Generate session ID only on client side
+    useEffect(() => {
+        setSessionId(generateSessionId());
+    }, []);
+
+    // Notify parent of transcript updates
+    useEffect(() => {
+        if (transcript.length > 0) {
+            onTranscriptUpdate?.(transcript);
+        }
+    }, [transcript, onTranscriptUpdate]);
 
     /**
      * ElevenLabs conversation hook
@@ -70,11 +82,7 @@ export function VoiceInterface({
                 timestamp: new Date(),
             };
 
-            setTranscript((prev) => {
-                const updated = [...prev, newMessage];
-                onTranscriptUpdate?.(updated);
-                return updated;
-            });
+            setTranscript((prev) => [...prev, newMessage]);
 
             // Update caption
             setCurrentCaption(message.message);
@@ -321,7 +329,7 @@ export function VoiceInterface({
 
             {/* Session/Conversation ID for debugging */}
             <div className="text-xs text-slate-600 space-y-1 text-center">
-                <p>Session: {sessionId}</p>
+                {sessionId && <p>Session: {sessionId}</p>}
                 {conversationId && <p>Conversation: {conversationId}</p>}
             </div>
         </div>

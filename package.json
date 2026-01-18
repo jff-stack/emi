@@ -25,12 +25,16 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.4",
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@openzeppelin/contracts": "^5.4.0",
     "@tailwindcss/postcss": "^4",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "chai": "^6.2.2",
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.3",
