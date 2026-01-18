@@ -1,42 +1,65 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+
 /**
- * @title IntakeRegistry
- * @author Emi Medical AI
- * @notice A simple contract for recording medical intake report hashes
- * @dev Optimized for kairoaisec.com security analysis
- * 
- * This contract provides immutable, timestamped records of clinical report hashes
- * to ensure data integrity and provide audit trails for medical intake processes.
- * 
- * Security Considerations:
- * - No patient data is stored on-chain, only hashes
- * - Hashes are irreversible - original data cannot be derived
- * - Access control ensures only authorized registrars can submit
- * - Events provide transparent audit trail
+ * @title VerifiableIntakeProtocol
+ * @dev A secure smart contract for establishing legal 'Source of Truth' on-chain
+ * @notice This contract allows authorized Intake Officers to submit immutable SHA-256 hashes
  */
-contract IntakeRegistry {
-    // ============ State Variables ============
+contract VerifiableIntakeProtocol is AccessControl, ReentrancyGuard, Pausable {
+    
+    // =====================================================
+    // ROLES & CONSTANTS
+    // =====================================================
+    
+    bytes32 public constant INTAKE_OFFICER_ROLE = keccak256("INTAKE_OFFICER_ROLE");
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    
+    // =====================================================
+    // CUSTOM ERRORS
+    // =====================================================
+    
+    error ReportAlreadyExists(string reportId);
+    error InvalidReportId();
+    error InvalidHash();
+    error UnauthorizedAccess();
+    error ReportNotFound(string reportId);
+    
+    // =====================================================
+    // DATA STRUCTURES
+    // =====================================================
     
     /**
-     * @notice Owner of the contract with admin privileges
+     * @dev Struct to store report information
+     * @param reportHash SHA-256 hash of the report
+     * @param timestamp Block timestamp when submitted
+     * @param intakeOfficer Address of the officer who submitted
+     * @param blockNumber Block number when submitted
+     * @param exists Flag to check if report exists (gas optimization)
      */
-    address public owner;
+    struct ReportRecord {
+        bytes32 reportHash;
+        uint256 timestamp;
+        address intakeOfficer;
+        uint256 blockNumber;
+        bool exists;
+    }
     
-    /**
-     * @notice Mapping of authorized registrar addresses
-     */
-    mapping(address => bool) public authorizedRegistrars;
+    // =====================================================
+    // STATE VARIABLES
+    // =====================================================
     
-    /**
-     * @notice Mapping of report hash to registration details
-     */
-    mapping(bytes32 => ReportRecord) public reports;
+    /// @dev Mapping from reportId to ReportRecord
+    mapping(string => ReportRecord) private reports;
     
-    /**
-     * @notice Total number of registered reports
-     */
+    /// @dev Array to track all report IDs for enumeration
+    string[] private reportIds;
+    
+    /// @dev Counter for total reports (gas-optimized alternative to array length)
     uint256 public totalReports;
     
     // ============ Structs ============

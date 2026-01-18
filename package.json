@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "compile": "hardhat compile",
+    "deploy:sepolia": "hardhat run scripts/deploy-verifiable-intake.ts --network sepolia",
+    "deploy:polygon": "hardhat run scripts/deploy-verifiable-intake.ts --network polygon",
+    "deploy:local": "hardhat run scripts/deploy-verifiable-intake.ts --network hardhat",
+    "test:contract": "hardhat test",
+    "verify:sepolia": "hardhat verify --network sepolia"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
