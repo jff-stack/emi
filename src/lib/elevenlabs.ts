@@ -1,223 +1,149 @@
 /**
- * @fileoverview ElevenLabs Conversational AI SDK setup
- * Handles voice agent configuration and session management
- * 
+ * @fileoverview ElevenLabs Conversational AI SDK configuration
+ * Handles voice agent configuration and Emi persona definition
+ *
  * @setup
  * 1. Add your ElevenLabs credentials to environment variables:
- *    NEXT_PUBLIC_ELEVENLABS_API_KEY=your_api_key
  *    NEXT_PUBLIC_ELEVENLABS_AGENT_ID=your_agent_id
- * 
- * 2. Install the ElevenLabs SDK:
- *    npm install @11labs/client
- * 
- * 3. Configure your agent in the ElevenLabs dashboard:
+ *
+ * 2. Configure your agent in the ElevenLabs dashboard:
  *    https://elevenlabs.io/convai
- * 
+ *
  * @see https://elevenlabs.io/docs/conversational-ai/overview
  */
 
 /**
- * @description Configuration for the ElevenLabs voice agent
+ * @description Transcript entry from conversation
  */
-export interface VoiceAgentConfig {
-    /** API key for authentication */
-    apiKey: string;
-    /** Agent ID from ElevenLabs dashboard */
-    agentId: string;
-    /** Optional voice ID to use (defaults to agent's configured voice) */
-    voiceId?: string;
-    /** Enable debug logging */
-    debug?: boolean;
-}
-
-/**
- * @description Message from the conversation
- */
-export interface ConversationMessage {
+export interface TranscriptMessage {
     /** Role of the speaker */
     role: "user" | "agent";
     /** Text content of the message */
     text: string;
     /** Timestamp of the message */
     timestamp: Date;
-    /** Audio duration in seconds (if available) */
-    audioDuration?: number;
 }
 
 /**
- * @description Callbacks for conversation events
+ * @description Conversation state for UI updates
  */
-export interface ConversationCallbacks {
-    /** Called when a new message is received */
-    onMessage?: (message: ConversationMessage) => void;
-    /** Called when agent starts speaking */
-    onAudioStart?: () => void;
-    /** Called when agent stops speaking */
-    onAudioEnd?: () => void;
-    /** Called when user speech is detected */
-    onUserSpeechStart?: () => void;
-    /** Called when user stops speaking */
-    onUserSpeechEnd?: () => void;
-    /** Called when an error occurs */
-    onError?: (error: Error) => void;
-    /** Called when connection status changes */
-    onConnectionChange?: (connected: boolean) => void;
+export interface ConversationState {
+    /** Whether Emi is currently speaking */
+    isSpeaking: boolean;
+    /** Whether the system is listening to the user */
+    isListening: boolean;
+    /** Current transcript buffer of the ongoing speech */
+    transcriptBuffer: string;
+    /** Connection status */
+    isConnected: boolean;
 }
 
 /**
- * @description Active conversation session
+ * @description Agent personality configuration
+ * Configure this in the ElevenLabs dashboard
  */
-export interface ConversationSession {
-    /** Unique session identifier */
-    sessionId: string;
-    /** Whether the session is active */
-    isActive: boolean;
-    /** End the conversation */
-    end: () => Promise<void>;
-    /** Mute/unmute the microphone */
-    setMuted: (muted: boolean) => void;
-    /** Get conversation history */
-    getHistory: () => ConversationMessage[];
+export interface EmiPersonality {
+    /** Agent name */
+    name: string;
+    /** System prompt for agent behavior */
+    systemPrompt: string;
+    /** Initial greeting message */
+    firstMessage: string;
+    /** Language code */
+    language: string;
 }
 
 /**
- * @description Default agent configuration
+ * @description Emi's persona configuration
+ * Use this to configure your agent in the ElevenLabs dashboard
+ *
+ * Persona: A warm, comforting, and highly empathetic digital intake nurse
+ * Voice Style: Gentle, slow-paced, and encouraging
  */
-const DEFAULT_CONFIG: Partial<VoiceAgentConfig> = {
-    debug: false,
+export const EMI_PERSONA: EmiPersonality = {
+    name: "Emi",
+    systemPrompt: `You are Emi, a warm, comforting, and highly empathetic digital intake nurse. Your voice style is gentle, slow-paced, and encouraging. You use natural fillers like "I see," "Take your time," and "Mm-hmm" to make patients feel truly heard.
+
+## Your Objective
+Gather clinical context without sounding clinical. Instead of asking "List your symptoms," say "Tell me a little about how you've been feeling lately."
+
+## Conversation Guidelines
+1. **One Question at a Time**: Ask a single, focused follow-up question to deepen context. Never overwhelm with multiple questions.
+
+2. **Validate Pain & Discomfort**: When a patient mentions pain or discomfort, always validate first:
+   - "I'm so sorry you're dealing with that pain. Where exactly are you feeling it right now?"
+   - "That sounds really uncomfortable. How long have you been experiencing this?"
+
+3. **Natural Empathy Phrases**: Use these naturally throughout:
+   - "I understand."
+   - "That must be difficult."
+   - "Thank you for sharing that with me."
+   - "Take all the time you need."
+
+4. **Gentle Probing**: Ask clarifying questions with care:
+   - "Can you tell me a bit more about that?"
+   - "When did you first notice this?"
+   - "On a scale of 1 to 10, how would you describe the intensity?"
+
+5. **Exit Nudge**: Periodically offer an exit:
+   - "Whenever you feel you've shared enough, just let me know, and I'll prepare the summary for your doctor."
+
+6. **Medical History**: Gently inquire about:
+   - Current medications
+   - Known allergies
+   - Pre-existing conditions
+   - Recent changes in health
+
+7. **Closing**: When the patient signals they're done:
+   - "Thank you so much for sharing all of this with me. I'll prepare a summary for your healthcare provider now. You've been very helpful."
+
+## Important Boundaries
+- NEVER provide medical diagnoses or treatment advice
+- If symptoms suggest an emergency (chest pain, difficulty breathing, signs of stroke), calmly recommend seeking immediate medical attention
+- Always maintain a warm, non-judgmental tone`,
+
+    firstMessage:
+        "Hello, I'm Emi, your intake companion. I'm here to learn a little bit about how you're feeling today so we can share that with your doctor. Take your time — there's no rush. So, tell me... how have you been feeling lately?",
+
+    language: "en",
 };
 
 /**
- * @description Create an ElevenLabs client instance
- * @param config - Configuration options
- * @returns Configured ElevenLabs client
- * 
- * @example
- * ```typescript
- * const client = createElevenLabsClient({
- *   apiKey: process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY!,
- *   agentId: process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID!,
- * });
- * ```
+ * @description Get the ElevenLabs agent ID from environment
+ * @throws Error if not configured
  */
-export function createElevenLabsClient(config: VoiceAgentConfig) {
-    const mergedConfig = { ...DEFAULT_CONFIG, ...config };
-
-    // TODO: Initialize actual ElevenLabs client
-    // const client = new ElevenLabsClient({
-    //   apiKey: mergedConfig.apiKey,
-    // });
-
-    return {
-        config: mergedConfig,
-        // client,
-    };
-}
-
-/**
- * @description Start a new voice conversation with the AI agent
- * @param callbacks - Event callbacks for conversation events
- * @returns Promise resolving to an active conversation session
- * 
- * @example
- * ```typescript
- * const session = await startConversation({
- *   onMessage: (msg) => console.log(`${msg.role}: ${msg.text}`),
- *   onError: (err) => console.error("Error:", err),
- * });
- * 
- * // Later, to end the conversation:
- * await session.end();
- * ```
- */
-export async function startConversation(
-    callbacks: ConversationCallbacks = {}
-): Promise<ConversationSession> {
-    const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+export function getAgentId(): string {
     const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;
-
-    if (!apiKey || !agentId) {
+    if (!agentId) {
         throw new Error(
-            "ElevenLabs credentials not configured. Please add NEXT_PUBLIC_ELEVENLABS_API_KEY and NEXT_PUBLIC_ELEVENLABS_AGENT_ID to your environment."
+            "NEXT_PUBLIC_ELEVENLABS_AGENT_ID is not configured. Please add it to your environment variables."
         );
     }
-
-    // TODO: Implement actual ElevenLabs conversation start
-    // const client = createElevenLabsClient({ apiKey, agentId });
-    //
-    // const conversation = await client.client.convai.conversation.start({
-    //   agentId,
-    //   clientTools: [],
-    //   onMessage: callbacks.onMessage,
-    //   onError: callbacks.onError,
-    // });
-
-    const messageHistory: ConversationMessage[] = [];
-
-    // Placeholder session for development
-    const placeholderSession: ConversationSession = {
-        sessionId: `session-${Date.now()}`,
-        isActive: true,
-        end: async () => {
-            console.log("Conversation ended");
-            callbacks.onConnectionChange?.(false);
-        },
-        setMuted: (muted: boolean) => {
-            console.log(`Microphone ${muted ? "muted" : "unmuted"}`);
-        },
-        getHistory: () => messageHistory,
-    };
-
-    // Simulate connection established
-    callbacks.onConnectionChange?.(true);
-
-    return placeholderSession;
+    return agentId;
 }
 
 /**
- * @description Configure the voice agent personality and behavior
- * This should be done in the ElevenLabs dashboard, but this type
- * documents the expected configuration structure
+ * @description Generate a unique session ID for Kairo anchoring
  */
-export interface AgentPersonality {
-    /** Agent name displayed to users */
-    name: string;
-    /** System prompt defining agent behavior */
-    systemPrompt: string;
-    /** First message the agent says */
-    firstMessage: string;
-    /** Language of the agent */
-    language: string;
-    /** Voice characteristics */
-    voice: {
-        voiceId: string;
-        stability: number;
-        similarityBoost: number;
-    };
+export function generateSessionId(): string {
+    const timestamp = Date.now().toString(36);
+    const randomPart = Math.random().toString(36).substring(2, 9);
+    return `emi-session-${timestamp}-${randomPart}`;
 }
 
 /**
- * @description Recommended personality configuration for Emi
- * Configure this in your ElevenLabs dashboard
+ * @description Format transcript for clinical synthesis
+ * @param messages - Array of transcript messages
+ * @returns Formatted transcript string
  */
-export const EMI_PERSONALITY: AgentPersonality = {
-    name: "Emi",
-    systemPrompt: `You are Emi, a compassionate and professional AI medical intake assistant. 
-Your role is to gather patient symptoms, medical history, and vital information before their appointment.
-
-Guidelines:
-- Be warm and reassuring while maintaining professionalism
-- Ask one question at a time and wait for the response
-- Use simple language, avoiding complex medical jargon
-- Show empathy when patients describe discomfort or concerns
-- Summarize what you've learned periodically
-- Never provide medical diagnoses or treatment advice
-- If symptoms suggest emergency, recommend immediate medical attention`,
-    firstMessage: "Hello, I'm Emi, your AI intake assistant. I'll help gather some information before your appointment. How are you feeling today?",
-    language: "en",
-    voice: {
-        voiceId: "your-voice-id", // Configure in ElevenLabs
-        stability: 0.5,
-        similarityBoost: 0.75,
-    },
-};
+export function formatTranscriptForSynthesis(
+    messages: TranscriptMessage[]
+): string {
+    return messages
+        .map((msg) => {
+            const speaker = msg.role === "agent" ? "Emi" : "Patient";
+            const time = msg.timestamp.toLocaleTimeString();
+            return `[${time}] ${speaker}: ${msg.text}`;
+        })
+        .join("\n\n");
+}
