@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.0/contracts/access/AccessControl.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.0/contracts/security/ReentrancyGuard.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.0/contracts/security/Pausable.sol";
 
 /**
  * @title VerifiableIntakeProtocol
@@ -439,21 +439,18 @@ contract VerifiableIntakeProtocol is AccessControl, ReentrancyGuard, Pausable {
     /**
      * @dev Get contract statistics
      * @return totalReportsCount Total number of reports
-     * @return totalOfficers Total number of active intake officers
-     * @return contractDeployed Block number when contract was deployed
+     * @return contractPaused Whether contract is paused
      */
     function getContractStats() 
         external 
         view 
         returns (
             uint256 totalReportsCount,
-            uint256 totalOfficers,
-            uint256 contractDeployed
+            bool contractPaused
         ) 
     {
         totalReportsCount = totalReports;
-        totalOfficers = getRoleMemberCount(INTAKE_OFFICER_ROLE);
-        contractDeployed = 0; // Would need to store in constructor if needed
+        contractPaused = paused();
     }
     
     // =====================================================

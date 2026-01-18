@@ -10,18 +10,17 @@
  *   3. Set VERIFIABLE_INTAKE_ADMIN_ADDRESS in your .env
  */
 
-// @ts-ignore - Hardhat Runtime Environment augmented types
-import { ethers } from "hardhat";
+import hre from "hardhat";
 
 async function main() {
-  const [deployer] = await ethers.getSigners();
+  const [deployer] = await hre.ethers.getSigners();
   
   console.log("╔══════════════════════════════════════════════════════════════╗");
   console.log("║         VerifiableIntakeProtocol Deployment                 ║");
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log();
   console.log("Deploying with account:", deployer.address);
-  console.log("Account balance:", ethers.utils.formatEther(await deployer.getBalance()), "ETH");
+  console.log("Account balance:", hre.ethers.formatEther(await hre.ethers.provider.getBalance(deployer.address)), "ETH");
   console.log();
 
   // Get admin address from environment
@@ -35,11 +34,13 @@ async function main() {
 
   // Deploy the contract
   console.log("📝 Deploying VerifiableIntakeProtocol...");
-  const VerifiableIntakeProtocol = await ethers.getContractFactory("VerifiableIntakeProtocol");
+  const VerifiableIntakeProtocol = await hre.ethers.getContractFactory("VerifiableIntakeProtocol");
   const contract = await VerifiableIntakeProtocol.deploy(adminAddress);
 
   console.log("⏳ Waiting for deployment...");
-  await contract.deployed();
+  await contract.waitForDeployment();
+  
+  const contractAddress = await contract.getAddress();
 
   console.log();
   console.log("✅ VerifiableIntakeProtocol deployed successfully!");
@@ -48,16 +49,17 @@ async function main() {
   console.log("║                  Deployment Information                      ║");
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log();
-  console.log("Contract Address:", contract.address);
+  console.log("Contract Address:", contractAddress);
   console.log("Deployer:", deployer.address);
   console.log("Admin:", adminAddress);
-  console.log("Network:", (await ethers.provider.getNetwork()).name);
-  console.log("Chain ID:", (await ethers.provider.getNetwork()).chainId);
+  const network = await hre.ethers.provider.getNetwork();
+  console.log("Network:", network.name);
+  console.log("Chain ID:", network.chainId);
   console.log();
 
   // Wait for a few block confirmations
   console.log("⏳ Waiting for block confirmations...");
-  await contract.deployTransaction.wait(5);
+  await contract.deploymentTransaction()!.wait(5);
   console.log("✅ Confirmed!");
   console.log();
 
@@ -66,10 +68,10 @@ async function main() {
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log();
   console.log("1. Add the contract address to your .env.local:");
-  console.log(`   NEXT_PUBLIC_VERIFIABLE_INTAKE_CONTRACT_ADDRESS=${contract.address}`);
+  console.log(`   NEXT_PUBLIC_CONTRACT_ADDRESS=${contractAddress}`);
   console.log();
   console.log("2. Verify the contract on Etherscan:");
-  console.log(`   npx hardhat verify --network ${(await ethers.provider.getNetwork()).name} ${contract.address} "${adminAddress}"`);
+  console.log(`   npx hardhat verify --network ${network.name} ${contractAddress} "${adminAddress}"`);
   console.log();
   console.log("3. Add intake officers using the admin account:");
   console.log(`   contract.addIntakeOfficer("0x...")`);

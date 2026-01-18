@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { VitalsData } from "@/hooks/useVitals";
 import { TranscriptEntry } from "@/hooks/useTriage";
+import { submitReportToBlockchain } from "@/lib/blockchain";
 
 /**
  * @description Props for the ReportPreview component
@@ -121,17 +122,36 @@ export function ReportPreview({ transcript, vitals, onClose }: ReportPreviewProp
         setIsVerifying(true);
 
         try {
-            // TODO: Call Kairo verification service
-            // const hash = await registerReportHash(report);
+            // Prepare report data for blockchain
+            const reportData = {
+                patientId: "12345", // In production, use actual patient ID
+                timestamp: Date.now(),
+                vitals: {
+                    heartRate: vitals.heartRate,
+                    respiratoryRate: vitals.respiratoryRate,
+                    bloodPressure: vitals.bloodPressure,
+                    oxygenSaturation: vitals.oxygenSaturation,
+                    temperature: vitals.temperature,
+                },
+                transcript: transcript.map((entry) => ({
+                    role: entry.role,
+                    content: entry.content,
+                    timestamp: entry.timestamp,
+                })),
+                triage: triage
+                    ? {
+                          level: triage.level,
+                          summary: triage.summary,
+                          recommendations: triage.recommendations,
+                      }
+                    : null,
+            };
 
-            // Simulated verification
-            const mockHash = `0x${Array.from({ length: 64 }, () =>
-                Math.floor(Math.random() * 16).toString(16)
-            ).join("")}`;
-
-            setReport({ ...report, verificationHash: mockHash });
+            // Submit to blockchain using real smart contract
+            const txHash = await submitReportToBlockchain(reportData);
+            setReport({ ...report, verificationHash: txHash });
         } catch (err) {
-            setError("Failed to verify on blockchain. Please try again.");
+            setError("Failed to verify on blockchain. Please ensure MetaMask is connected.");
             console.error("Verification error:", err);
         } finally {
             setIsVerifying(false);

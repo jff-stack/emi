@@ -1,6 +1,6 @@
 import type { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import * as dotenv from "dotenv";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -15,16 +15,13 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    mainnet: {
-      type: "http",
-      url: process.env.MAINNET_RPC_URL || "https://eth.llamarpc.com",
-      accounts: process.env.VERIFIABLE_INTAKE_PRIVATE_KEY
-        ? [process.env.VERIFIABLE_INTAKE_PRIVATE_KEY]
-        : [],
-      chainId: 1,
+    hardhat: {
+      chainId: 1337,
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
     },
     sepolia: {
-      type: "http",
       url:
         process.env.SEPOLIA_RPC_URL ||
         "https://eth-sepolia.g.alchemy.com/v2/demo",
@@ -32,14 +29,6 @@ const config: HardhatUserConfig = {
         ? [process.env.VERIFIABLE_INTAKE_PRIVATE_KEY]
         : [],
       chainId: 11155111,
-    },
-    polygon: {
-      type: "http",
-      url: process.env.POLYGON_RPC_URL || "https://polygon-rpc.com",
-      accounts: process.env.VERIFIABLE_INTAKE_PRIVATE_KEY
-        ? [process.env.VERIFIABLE_INTAKE_PRIVATE_KEY]
-        : [],
-      chainId: 137,
     },
   },
   paths: {
